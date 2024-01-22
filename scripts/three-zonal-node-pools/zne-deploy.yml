@@ -1,0 +1,173 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zne-nginx-01
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: zne-nginx
+      zone: one
+  template:
+    metadata:
+      labels:
+        app: zne-nginx
+        zone: one
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 1
+            preference:
+              matchExpressions:
+              - key: topology.kubernetes.io/zone
+                operator: In
+                values:
+                - westeurope-1
+      topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: DoNotSchedule
+        labelSelector:
+          matchLabels:
+            app: zne-nginx
+      nodeSelector:
+        "kubernetes.io/os": linux
+      containers:
+      - image: mcr.microsoft.com/oss/nginx/nginx:1.17.3-alpine
+        name: nginx-azuredisk
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "125m"
+          limits:
+            memory: "128Mi"
+            cpu: "250m"
+        command:
+          - "/bin/sh"
+          - "-c"
+          - while true; do echo $(date) >> /mnt/azuredisk/outfile; sleep 1; done
+        volumeMounts:
+          - name: zne-azure-disk-01
+            mountPath: "/mnt/azuredisk"
+            readOnly: false
+      volumes:
+      - name: zne-azure-disk-01
+        persistentVolumeClaim:
+          claimName: zne-pvc-azure-disk-01
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zne-nginx-02
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: zne-nginx
+      zone: two
+  template:
+    metadata:
+      labels:
+        app: zne-nginx
+        zone: two
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 1
+            preference:
+              matchExpressions:
+              - key: topology.kubernetes.io/zone
+                operator: In
+                values:
+                - westeurope-2
+      topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: DoNotSchedule
+        labelSelector:
+          matchLabels:
+            app: zne-nginx
+      nodeSelector:
+        "kubernetes.io/os": linux
+      containers:
+      - image: mcr.microsoft.com/oss/nginx/nginx:1.17.3-alpine
+        name: nginx-azuredisk
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "125m"
+          limits:
+            memory: "128Mi"
+            cpu: "250m"
+        command:
+          - "/bin/sh"
+          - "-c"
+          - while true; do echo $(date) >> /mnt/azuredisk/outfile; sleep 1; done
+        volumeMounts:
+          - name: zne-azure-disk-02
+            mountPath: "/mnt/azuredisk"
+            readOnly: false
+      volumes:
+      - name: zne-azure-disk-02
+        persistentVolumeClaim:
+          claimName: zne-pvc-azure-disk-02
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zne-nginx-03
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: zne-nginx
+      zone: three
+  template:
+    metadata:
+      labels:
+        app: zne-nginx
+        zone: three
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 1
+            preference:
+              matchExpressions:
+              - key: topology.kubernetes.io/zone
+                operator: In
+                values:
+                - westeurope-3
+      topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: DoNotSchedule
+        labelSelector:
+          matchLabels:
+            app: zne-nginx
+      nodeSelector:
+        "kubernetes.io/os": linux
+      containers:
+      - image: mcr.microsoft.com/oss/nginx/nginx:1.17.3-alpine
+        name: nginx-azuredisk
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "125m"
+          limits:
+            memory: "128Mi"
+            cpu: "250m"
+        command:
+          - "/bin/sh"
+          - "-c"
+          - while true; do echo $(date) >> /mnt/azuredisk/outfile; sleep 1; done
+        volumeMounts:
+          - name: zne-azure-disk-03
+            mountPath: "/mnt/azuredisk"
+            readOnly: false
+      volumes:
+      - name: zne-azure-disk-03
+        persistentVolumeClaim:
+          claimName: zne-pvc-azure-disk-03

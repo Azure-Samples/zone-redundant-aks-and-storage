@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lrs-nginx
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: lrs-nginx
+  template:
+    metadata:
+      labels:
+        app: lrs-nginx
+    spec:
+      topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: DoNotSchedule
+        labelSelector:
+          matchLabels:
+            app: lrs-nginx
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: DoNotSchedule
+        labelSelector:
+          matchLabels:
+            app: lrs-nginx
+      nodeSelector:
+        "kubernetes.io/os": linux
+      containers:
+      - image: mcr.microsoft.com/oss/nginx/nginx:1.17.3-alpine
+        name: nginx-azuredisk
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "125m"
+          limits:
+            memory: "128Mi"
+            cpu: "250m"
+        command:
+          - "/bin/sh"
+          - "-c"
+          - while true; do echo $(date) >> /mnt/azuredisk/outfile; sleep 1; done
+        volumeMounts:
+          - name: lrs-azure-disk
+            mountPath: "/mnt/azuredisk"
+            readOnly: false
+      volumes:
+      - name: lrs-azure-disk
+        persistentVolumeClaim:
+          claimName: lrs-pvc-azure-disk
