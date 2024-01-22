@@ -19,14 +19,14 @@ Resilience is a critical aspect of any modern application infrastructure. When f
 
 ![Availability Zones](./images/regions-availability-zones.png)
 
-Not all the Azure regions support availabilit zons. For more information on which regions support Availability Zones, you can refer to the [Availability zone service and regional support](https://learn.microsoft.com/en-us/azure/reliability/availability-zones-service-support) documentation.
+Not all the Azure regions support availability zones. For more information on which regions support Availability Zones, you can refer to the [Availability zone service and regional support](https://learn.microsoft.com/en-us/azure/reliability/availability-zones-service-support) documentation.
 
 ## Azure services with availability zone support
 
 Azure is continuously expanding its range of services that support availability zones. These services can be divided into three types: zonal, zone-redundant, and always-available.
 
 - **Zonal services** allow you to deploy resources to a specific availability zone of your choice, ensuring optimal performance and low latency. Resiliency is achieved by replicating applications and data across multiple zones within the same region. For example, you can align the agent nodes of an AKS node pool and the managed disks created via persistent volume claims to a specific zone, increasing resilience by deploying multiple instances of resources across different zones.
-- **Zone-redundant services** automatically distribute or replicate resources across multiple availability zones. This ensures that even if one zone fails, the data remains highly available. For instance, you cn create a zone-redundant VMSS-based node pool where the nodes are spread across availability zones within a region.
+- **Zone-redundant services** automatically distribute or replicate resources across multiple availability zones. This ensures that even if one zone fails, the data remains highly available. For instance, you can create a zone-redundant VMSS-based node pool where the nodes are spread across availability zones within a region.
 - **Always-available services** are resilient to both zone-wide and region-wide outages. These services are available across all Azure geographies and provide uninterrupted availability. For a comprehensive list of always-available services, also known as non-regional services, you can refer to the [Products available by region](https://azure.microsoft.com/global-infrastructure/services/) documentation on Azure.
 
 ## Maximizing Resilience with Availability Zones
@@ -95,7 +95,7 @@ The first strategy entails deploying an AKS cluster with zone-redundant node poo
 
 ![AKS cluster with Zone Redundant Node Pools](./images/architecture01.png)
 
-### Deploy an AKS cluster with ZZone-Redundant Node Pools using Azure CLI
+### Deploy an AKS cluster with Zone-Redundant Node Pools using Azure CLI
 
 When creating a cluster using the [az aks create](https://learn.microsoft.com/en-us/cli/azure/aks#az-aks-create) command, the `--zones` parameter allows you to specify the availability zones for deploying agent nodes. Here's an example that demonstrates creating an AKS cluster, with a total of three nodes. One node is deployed in zone `1`, another in zone `2`, and the third in zone `3`. For more information, see [Create an AKS cluster across availability zones](https://learn.microsoft.com/en-us/azure/aks/availability-zones#create-an-aks-cluster-across-availability-zones).
 
@@ -1828,7 +1828,7 @@ namespace="disk-test"
 
 If you plan on using the cluster autoscaler with node pools that span multiple zones and leverage scheduling features related to zones, such as volume topological scheduling, we recommend you have one node pool per zone and enable `--balance-similar-node-groups` through the autoscaler profile. This ensures the autoscaler can successfully scale up agenbt nodes separately in each node pool and related availability zone as required and keep the sizes of the node pools balanced. When using the AKS cluster autoscaler with node pools spanning multiple availability zones, there are a few considerations to keep in mind:
 
-1. It is recommended to create a separate node pool for each zone when using nodepools that attach persistent volumes based on locally redundant storage (LSR) Azure Storage using a CSI Driver, such as [Azure Disks](https://learn.microsoft.com/en-us/azure/aks/azure-disk-csi), [Azure Files](https://learn.microsoft.com/en-us/azure/aks/azure-files-csi), or [Azure Blob Storage](https://learn.microsoft.com/en-us/azure/aks/azure-blob-csi?tabs=NFS). This is necessary because an LRS persistent volume in one availability zone cannot be attached and accessed by a pod in another availability zone.
+1. It is recommended to create a separate node pool for each zone when using node pools that attach persistent volumes based on locally redundant storage (LSR) Azure Storage using a CSI Driver, such as [Azure Disks](https://learn.microsoft.com/en-us/azure/aks/azure-disk-csi), [Azure Files](https://learn.microsoft.com/en-us/azure/aks/azure-files-csi), or [Azure Blob Storage](https://learn.microsoft.com/en-us/azure/aks/azure-blob-csi?tabs=NFS). This is necessary because an LRS persistent volume in one availability zone cannot be attached and accessed by a pod in another availability zone.
 2. If multiple node pools are created within each zone, it is recommended to enable the `--balance-similar-node-groups` property in the autoscaler profile. This feature helps identify similar node pools and ensures a balanced distribution of nodes across them.
 3. However, if you are not utilizing Persistent Volumes, the [AKS cluster autoscaler](https://learn.microsoft.com/en-us/azure/aks/cluster-autoscaler?tabs=azure-cli) should work without any issues with node pools that span multiple Availability Zones.
 
@@ -2212,7 +2212,7 @@ Let's observe the behavior when simulating a failure of one of the availability 
 #!/bin/bash
 
 # Retrieve the nodes in the user01 agent pool
-echo "Retrieving the ones in the user01 node pool..."
+echo "Retrieving the nodes in the user01 node pool..."
 result=$(kubectl get nodes -l kubernetes.azure.com/agentpool=user01 -o jsonpath='{.items[*].metadata.name}')
 
 # Convert the string of node names into an array
@@ -2232,7 +2232,7 @@ done
 The script execution will produce an output similar to the following.
 
 ```bash
-Retrieving the ones in the user01 node pool...
+Retrieving the nodes in the user01 node pool...
 Cordoning the [aks-user01-13513131-vmss000000] node...
 node/aks-user01-13513131-vmss000000 cordoned
 Draining the [aks-user01-13513131-vmss000000] node...
@@ -2474,4 +2474,4 @@ This article discussed two approaches for creating a zone redundant AKS cluster:
    - **Cons**: a drawback is that you need to use [zone-redundant storage (ZRS)](https://learn.microsoft.com/en-us/azure/storage/common/storage-redundancy#zone-redundant-storage) to guarantee that Azure Disks mounted as persistent volumes can be accessed from any availability zone. [zone-redundant storage (ZRS)](https://learn.microsoft.com/en-us/azure/storage/common/storage-redundancy#zone-redundant-storage) storage provides better intra-region resiliency than [locally redundant storage (LRS)](https://learn.microsoft.com/en-us/azure/storage/common/storage-redundancy#locally-redundant-storage), but it's more costly.
 2. **AKS Cluster with three Node Pools**: Another approach involves creating an AKS cluster with three node pools, each assigned to a different [availability zone](https://learn.microsoft.com/en-us/azure/reliability/availability-zones-overview?tabs=azure-cli). This ensures redundancy across zones in the cluster.
    - **Pros**: The advantage of this approach is that you can use [Locally redundant storage (LRS)](https://learn.microsoft.com/en-us/azure/storage/common/storage-redundancy#locally-redundant-storage) when creating and mounting Azure disks, which are less expensive than [zone-redundant storage (ZRS)](https://learn.microsoft.com/en-us/azure/storage/common/storage-redundancy#zone-redundant-storage) Azure disks.
-   - **Cons**:However, a drawback is that you need to create and scale multiple separate deployments, one for each availability zone, for the same workload.
+   - **Cons**: a drawback is that you need to create and scale multiple separate deployments, one for each availability zone, for the same workload.
