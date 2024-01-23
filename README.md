@@ -1770,7 +1770,7 @@ This does not guarantee similar node pools will have exactly the same sizes:
 - The cluster autoscaler will only add as many nodes as required to run all existing pods. If the number of nodes is not divisible by the number of balanced node pools, some groups will get 1 more node than others.
 - The cluster autoscaler will only balance between node groups that can support the same set of pending pods. If you run pods that can only go to a single node group (for example due to nodeSelector on zone label) CA will only add nodes to this particular node group.
 
-You can opt-out a node group from being automatically balanced with other node groups using the same instance type by giving it any custom label. For more information, see [https://github.com/kubernetes/autoscaler/blob/master/cluster-autoscaler/FAQ.md#im-running-cluster-with-nodes-in-multiple-zones-for-ha-purposes-is-that-supported-by-cluster-autoscaler](I'm running cluster with nodes in multiple zones for HA purposes. Is that supported by Cluster Autoscaler?).
+You can opt-out a node group from being automatically balanced with other node groups using the same instance type by giving it any custom label. For more information, see [I'm running cluster with nodes in multiple zones for HA purposes. Is that supported by Cluster Autoscaler?](https://github.com/kubernetes/autoscaler/blob/master/cluster-autoscaler/FAQ.md#im-running-cluster-with-nodes-in-multiple-zones-for-ha-purposes-is-that-supported-by-cluster-autoscaler)
 
 Before running the script, make sure to define the variables that are defined in a separate file included in the script:
 
