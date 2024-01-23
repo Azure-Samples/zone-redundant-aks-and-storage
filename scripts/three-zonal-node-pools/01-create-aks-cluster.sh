@@ -295,6 +295,7 @@ if [[ $? != 0 ]]; then
     --nodepool-taints CriticalAddonsOnly=true:NoSchedule \
     --nodepool-labels nodePoolMode=system created=AzureCLI osDiskType=ephemeral osType=Linux --nodepool-tags osDiskType=ephemeral osDiskType=ephemeral osType=Linux \
     --tags created=AzureCLI \
+    --cluster-autoscaler-profile balance-similar-node-groups=true \
     --only-show-errors \
     --zones 1 2 3 1>/dev/null
 

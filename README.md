@@ -607,7 +607,7 @@ If you plan to deploy a workload to AKS which make use of the [Azure Disks CSI D
 3. Create a [persistent volume claim](https://kubernetes.io/docs/concepts/storage/persistent-volumes/) which references a storage class which makes use of [Zone Redundant Storage for managed disks (ZRS)](https://learn.microsoft.com/en-us/azure/virtual-machines/disks-redundancy#zone-redundant-storage-for-managed-disks), for example the `managed-csi-premium-zrs` storage class we introduced in the previous section.
 4. When deploying pods to a zone-redundant node pool, it is essential to ensure optimal distribution and resilience. To achieve this, you can utilize the [Pod Topology Spread Constraints](https://kubernetes.io/docs/concepts/workloads/pods/pod-topology-spread-constraints/) Kubernetes feature. By implementing Pod Topology Spread Constraints, you gain granular control over how pods are spread across your AKS cluster, taking into account failure-domains like regions, availability zones, and nodes. In this scenario, you can create constraints that span pod replicas across availability zones, as well as across different nodes within a single availability zone. By doing so, you can achieve several benefits. First, spreading pod replicas across availability zones ensures that your application remains available even if an entire zone goes down. Second, distributing pods across different nodes within a zone enhances fault tolerance, as it minimizes the impact of node failures or maintenance activities. By using Pod Topology Spread Constraints, you can maximize the resilience and availability of your applications in an AKS cluster. This approach optimizes resource utilization, minimizes downtime, and delivers a robust infrastructure for your workloads across multiple availability zones and nodes.
 
-### Test Workload resiliency of an AKS cluster with Zonal Node Pools
+### Test Workload resiliency of an AKS cluster with Zone Redundant Node Pools
 
 In this test, we simulate a situation where agent nodes in a particular availability zone experience a failure and become unavailable. The goal is to ensure that the application can still operate properly on the agent nodes in the remaining availability zones. To avoid any interference from the cluster autoscaler during the test and to guarantee that the user-mode zone-redundant node pool has exactly three nodes, each in a different availability zone, you can run the following bash script. This script disables the cluster autoscaler for each node pool and manually sets the number of nodes to three.
 
@@ -659,7 +659,8 @@ In this test, we will create two deployments, each consisting of a single pod re
 
 The objective is to observe the behavior of the two pods when we simulate a failure of the availability zone that hosts their agent nodes. To set up the necessary Kubernetes objects, you can use the provided script to create the following:
 
-- The `disk-test`  namespace.
+- The `disk-test` namespace.
+- The `managed-csi-premium-zrs` storage class.
 - Two persistent volume claims (PVC): `lrs-pvc-azure-disk` and `zrs-pvc-azure-disk`.
 - Two deployments: `lrs-nginx` and `zrs-nginx`. 
 
@@ -852,7 +853,7 @@ Please note that the system-mode node pool is tainted with `CriticalAddonsOnly=t
 
 The diagram below illustrates how the pods are distributed across the agent nodes of a zone-redundant node pool, along with the corresponding Locally Redundant Storage (LRS) and Zone-Redundant Storage (ZRS) managed disks.
 
-![Pods Distribution across Zonal Node Pools before the test](./images/zone-redundant-node-pool-before.png)
+![Pods Distribution across Zones before the test](./images/zone-redundant-node-pool-before.png)
 
 Here are some important observations:
 
@@ -1011,7 +1012,7 @@ From the output, you can observe that the nodes that were previously running the
 kubectl get pod -o=custom-columns=NAME:.metadata.name,STATUS:.status.phase,IP:.status.podIP,HOSTIP:.status.hostIP,NODE:.spec.nodeName -n disk-test
 ```
 
-The `lrs-nginx-*` is now in a `Pending` status, while the `zrs-nginx-*` runs on the only node in the `user` node pool in a `Ready` status.
+The `lrs-nginx-*` pod is now in a `Pending` status, while the `zrs-nginx-*` pod runs on the only node in the `user` node pool in a `Ready` status.
 
 ```bash
 NAME                            STATUS    IP            HOSTIP       NODE
@@ -1124,7 +1125,7 @@ spec:
     apiVersion: v1
     kind: PersistentVolumeClaim
     name: lrs-pvc-azure-disk
-    namespace: disk-test
+   namespace: disk-test
     resourceVersion: "52990"
     uid: 96c8f65f-2d4d-4156-b0a2-0d2aa9847e8e
   csi:
@@ -1185,7 +1186,7 @@ spec:
     apiVersion: v1
     kind: PersistentVolumeClaim
     name: zrs-pvc-azure-disk
-    namespace: disk-test
+   namespace: disk-test
     resourceVersion: "52998"
     uid: 8d19543a-e725-4b80-b304-2150895e7559
   csi:
@@ -1682,6 +1683,7 @@ if [[ $? != 0 ]]; then
     --aad-admin-group-object-ids $aadProfileAdminGroupObjectIDs \
     --nodepool-taints CriticalAddonsOnly=true:NoSchedule \
     --nodepool-labels nodePoolMode=system created=AzureCLI osDiskType=ephemeral osType=Linux --nodepool-tags osDiskType=ephemeral osDiskType=ephemeral osType=Linux \
+    --cluster-autoscaler-profile balance-similar-node-groups=true \
     --tags created=AzureCLI \
     --only-show-errors \
     --zones 1 2 3 1>/dev/null
@@ -1760,7 +1762,17 @@ else
 fi
 ```
 
-The variables used by the script are defined in a separate file included in the script:
+As you can note, the installation sets the `balance-similar-node-groups` setting of the cluster autoscaler profile to `true`. For more information on this flag, see [Cluster autoscaler profile settings](https://learn.microsoft.com/en-us/azure/aks/cluster-autoscaler?tabs=azure-cli#cluster-autoscaler-profile-settings). This ensures the autoscaler can successfully scale up and keep the sizes of the node pools balanced. If you set the flag to `true``, the cluster autoscaler will automatically identify node groups with the same instance type and the same set of labels (except for automatically added zone label) and try to keep the sizes of those node groups balanced.
+
+This does not guarantee similar node pools will have exactly the same sizes:
+
+- Currently the balancing is only done at scale-up. The cluster autoscaler will still scale down underutilized nodes regardless of the relative sizes of underlying node groups. The cluster autoscaler may take balancing into account during scale-down operations in the future.
+- The cluster autoscaler will only add as many nodes as required to run all existing pods. If the number of nodes is not divisible by the number of balanced node pools, some groups will get 1 more node than others.
+- The cluster autoscaler will only balance between node groups that can support the same set of pending pods. If you run pods that can only go to a single node group (for example due to nodeSelector on zone label) CA will only add nodes to this particular node group.
+
+You can opt-out a node group from being automatically balanced with other node groups using the same instance type by giving it any custom label. For more information, see [https://github.com/kubernetes/autoscaler/blob/master/cluster-autoscaler/FAQ.md#im-running-cluster-with-nodes-in-multiple-zones-for-ha-purposes-is-that-supported-by-cluster-autoscaler](I'm running cluster with nodes in multiple zones for HA purposes. Is that supported by Cluster Autoscaler?).
+
+Before running the script, make sure to define the variables that are defined in a separate file included in the script:
 
 ```bash
 # Azure Kubernetes Service (AKS) cluster
@@ -1804,7 +1816,7 @@ networkPolicy="azure"
 networkPlugin="azure"
 
 # Node count variables
-nodeCount=1
+nodeCount=3
 minCount=3
 maxCount=20
 maxPods=100
@@ -2445,6 +2457,267 @@ zne-nginx-03-7bb589bd98-gqwhx   Running   10.242.0.207   10.241.0.12   aks-user0
 As you can observe, all the pods as in a `Running` status. As shown in the following diagram, the Kubernetes scheduler was able to move each pod to another node in the same zonal node pool and availability zone. 
 
 ![Pods Distribution across Zonal Node Pools before the test](./images/zonal-node-pools-after.png)
+
+You can run the following script to uncordon the nodes.
+
+```bash
+#!/bin/bash
+
+# Get all nodes
+nodes=$(kubectl get nodes -o json)
+
+# Loop over nodes
+for node in $(echo "${nodes}" | jq -r '.items[].metadata.name'); do
+  # Check if node is cordoned
+  if kubectl get node "${node}" | grep -q "SchedulingDisabled"; then
+    # Uncordon node
+    echo "Uncordoning node ${node}..."
+    kubectl uncordon "${node}"
+  fi
+done
+```
+
+As a final test, let's create a workload which makes use of ZRS storage. In this test, we will create a deployment that consists of a single pod replica that can run on an any agent nodes, in any zonal node pool and availability zone. The objective is to observe the behavior of the pod when we simulate a failure of the availability zone that hosts its agent node. To set up the necessary Kubernetes objects, you can use the provided script to create the following:
+
+- The `disk-test` namespace.
+- The `managed-csi-premium-zrs` storage class.
+- The `zrs-pvc-azure-disk` persistent volume claim (PVC).
+- The `zrs-nginx` deployment.
+
+```bash
+#!/bin/bash
+
+# Variables
+source ./00-variables.sh
+
+# Check if namespace exists in the cluster
+result=$(kubectl get namespace -o jsonpath="{.items[?(@.metadata.name=='$namespace')].metadata.name}")
+
+if [[ -n $result ]]; then
+  echo "$namespace namespace already exists in the cluster"
+else
+  echo "$namespace namespace does not exist in the cluster"
+  echo "creating $namespace namespace in the cluster..."
+  kubectl create namespace $namespace
+fi
+
+# Create the managed-csi-premium-zrs storage class
+kubectl apply -f managed-csi-premium-zrs.yml
+
+# Create the zrs-pvc-azure-disk persistent volume claim
+kubectl apply -f zrs-pvc.yml -n $namespace
+
+# Create the zrs-nginx deployment
+kubectl apply -f zrs-deploy.yml -n $namespace
+```
+
+The following YAML manifest defines the `zrs-pvc-azure-disk` persistent volume claim. This PVC  utilizes the built-in `managed-csi-premium-zrs` storage class, which uses `Premium_ZRS` storage.
+
+```yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: zrs-pvc-azure-disk
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: managed-csi-premium-zrs
+```
+
+The following YAML manifest defines the `zrs-nginx` deployment. Here are some important observations:
+
+- The deployment consists of a single pod replica.
+- [Pod Topology Spread Constraints](https://kubernetes.io/docs/concepts/workloads/pods/pod-topology-spread-constraints/) are configured to distribute pod replicas across availability zones and different nodes within a single availability zone.
+- The deployment uses the `zrs-pvc-azure-disk` persistent volume claim to create and attach a zonal ZRS Premium SSD managed disk. This disk is replicated across three availability zones. The Azure disk is created in the node resource group, which contains all the infrastructure resources associated with the AKS cluster. The managed disk has the same name as the corresponding Kubernetes persistent volume.
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zrs-nginx
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: zrs-nginx
+  template:
+    metadata:
+      labels:
+        app: zrs-nginx
+    spec:
+      topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: DoNotSchedule
+        labelSelector:
+          matchLabels:
+            app: zrs-nginx
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: DoNotSchedule
+        labelSelector:
+          matchLabels:
+            app: zrs-nginx
+      nodeSelector:
+        "kubernetes.io/os": linux
+      containers:
+      - image: mcr.microsoft.com/oss/nginx/nginx:1.17.3-alpine
+        name: nginx-azuredisk
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "125m"
+          limits:
+            memory: "128Mi"
+            cpu: "250m"
+        command:
+          - "/bin/sh"
+          - "-c"
+          - while true; do echo $(date) >> /mnt/azuredisk/outfile; sleep 1; done
+        volumeMounts:
+          - name: zrs-azure-disk
+            mountPath: "/mnt/azuredisk"
+            readOnly: false
+      volumes:
+      - name: zrs-azure-disk
+        persistentVolumeClaim:
+          claimName: zrs-pvc-azure-disk
+```
+
+Please note that the system-mode node pool is tainted with `CriticalAddonsOnly=true:NoSchedule`. This taint prevents pods without the corresponding toleration from running on the agent nodes of this node pool. In our test deployments, we did not include this toleration. Therefore, when we create the deployment, the Kubernetes scheduler will place the pod on an agent node of one of the three zonal node pools, which don't have any taint.
+
+The diagram below illustrates the pod and its Zone-Redundant Storage (ZRS) managed disk in the cluster.
+
+![Pods Distribution across Zonal Node Pools before the test](./images/zonal-node-pools-zrs-disk-before.png)
+
+As observed in the previous section, [Zone-redundant storage (ZRS)](https://learn.microsoft.com/en-us/azure/storage/common/storage-redundancy#zone-redundant-storage) replicates Azure Disk data synchronously across three Azure availability zones within the same region. With ZRS, your data remains accessible for both read and write operations even if one zone becomes unavailable. However, during zone unavailability, Azure may perform networking updates such as DNS repointing, which could temporarily impact your application. To design applications for ZRS, it is advised to follow best practices for handling transient faults, including implementing retry policies with exponential back-off.
+
+Run the following command to retrieve information about the nodes in your Kubernetes cluster, including additional labels related to region and zone topology.
+
+```bash
+kubectl get nodes -L kubernetes.azure.com/agentpool,topology.kubernetes.io/region,topology.kubernetes.io/zone
+```
+
+The command should return a tabular output like the following that includes information about each node in the cluster, with additional columns for the specified labels `kubernetes.azure.com/agentpool`, `topology.kubernetes.io/region`, and `topology.kubernetes.io/zone`.
+
+```bash
+NAME                             STATUS   ROLES   AGE     VERSION   AGENTPOOL   REGION       ZONE
+aks-system-25336594-vmss000000   Ready    agent   5d22h   v1.28.3   system      westeurope   westeurope-1
+aks-system-25336594-vmss000001   Ready    agent   5d22h   v1.28.3   system      westeurope   westeurope-2
+aks-system-25336594-vmss000002   Ready    agent   5d22h   v1.28.3   system      westeurope   westeurope-3
+aks-user01-13513131-vmss000000   Ready    agent   5d22h   v1.28.3   user01      westeurope   westeurope-1
+aks-user01-13513131-vmss000001   Ready    agent   5d22h   v1.28.3   user01      westeurope   westeurope-1
+aks-user02-14905318-vmss000000   Ready    agent   5d22h   v1.28.3   user02      westeurope   westeurope-2
+aks-user02-14905318-vmss000001   Ready    agent   5d22h   v1.28.3   user02      westeurope   westeurope-2
+aks-user03-34408806-vmss000000   Ready    agent   5d22h   v1.28.3   user03      westeurope   westeurope-3
+aks-user03-34408806-vmss000001   Ready    agent   5d22h   v1.28.3   user03      westeurope   westeurope-3
+```
+
+You can note that the agent nodes of the three zonal node pools `user01`, `user02`, and `user03` are located in different availability zones. Now run the following `kubectl` command that returns information about the pod in the `disk-test` namespace.
+
+```bash
+kubectl get pod -o=custom-columns=NAME:.metadata.name,STATUS:.status.phase,IP:.status.podIP,HOSTIP:.status.hostIP,NODE:.spec.nodeName -n disk-test
+```
+
+This command provides information on the pod's name and private IP address, as well as the hosting node's name and private IP address. In this case, the pod is hosted in the first node of the `user03` node pool in the `westeurope-3` availability zone.
+
+```bash
+NAME                        STATUS    IP             HOSTIP        NODE
+zrs-nginx-b86595984-xf2pg   Running   10.242.0.187   10.241.0.10   aks-user03-34408806-vmss000000
+```
+
+Let's observe the behavior when simulating a failure of all the nodes of the `user03` node pool in the `westeurope-3` availability zone. Since the cluster consists of three zonal node pools, each composed of two nodes, we can simulate an availability zone failure by cordoning and draining the nodes of the `user03` node pool. You can run the following script to cordon and drain the nodes of the `user03` node pool:
+
+```bash
+#!/bin/bash
+
+# Retrieve the nodes in the user01 agent pool
+echo "Retrieving the nodes in the user03 node pool..."
+result=$(kubectl get nodes -l kubernetes.azure.com/agentpool=user03 -o jsonpath='{.items[*].metadata.name}')
+
+# Convert the string of node names into an array
+nodeNames=($result)
+
+for nodeName in ${nodeNames[@]}; do
+  # Cordon the node running the pod
+  echo "Cordoning the [$nodeName] node..."
+  kubectl cordon $nodeName
+
+  # Drain the node running the pod
+  echo "Draining the [$nodeName] node..."
+  kubectl drain $nodeName --ignore-daemonsets --delete-emptydir-data --force
+done
+```
+
+The script execution will produce an output similar to the following.
+
+```bash
+disk-test namespace does not exist in the cluster
+creating disk-test namespace in the cluster...
+namespace/disk-test created
+storageclass.storage.k8s.io/managed-csi-premium-zrs unchanged
+persistentvolumeclaim/zrs-pvc-azure-disk created
+deployment.apps/zrs-nginx created
+(base) paolos@Plunko:three-zonal-node-pools$ ./04-cordon-and-drain-nodes-running-pods-in-one-az.sh 
+Retrieving the ones in the user0 node pool...
+Cordoning the [aks-user03-34408806-vmss000000] node...
+node/aks-user03-34408806-vmss000000 cordoned
+Draining the [aks-user03-34408806-vmss000000] node...
+node/aks-user03-34408806-vmss000000 already cordoned
+Warning: ignoring DaemonSet-managed Pods: kube-system/ama-logs-pvzrt, kube-system/azure-cns-j7477, kube-system/azure-npm-xqs9r, kube-system/cloud-node-manager-qs94f, kube-system/csi-azuredisk-node-t6ps2, kube-system/csi-azurefile-node-xnswh, kube-system/kube-proxy-5vvgd, kube-system/microsoft-defender-collector-ds-24pql, kube-system/microsoft-defender-publisher-ds-lnf4b
+evicting pod disk-test/zrs-nginx-b86595984-xf2pg
+pod/zrs-nginx-b86595984-xf2pg evicted
+node/aks-user03-34408806-vmss000000 drained
+Cordoning the [aks-user03-34408806-vmss000001] node...
+node/aks-user03-34408806-vmss000001 cordoned
+Draining the [aks-user03-34408806-vmss000001] node...
+node/aks-user03-34408806-vmss000001 already cordoned
+Warning: ignoring DaemonSet-managed Pods: kube-system/ama-logs-qdscd, kube-system/azure-cns-tpvj9, kube-system/azure-npm-st58w, kube-system/cloud-node-manager-tmw64, kube-system/csi-azuredisk-node-qwlws, kube-system/csi-azurefile-node-fz9xn, kube-system/kube-proxy-wg48x, kube-system/microsoft-defender-collector-ds-s4mcw, kube-system/microsoft-defender-publisher-ds-6q6z9
+evicting pod disk-test/zrs-nginx-b86595984-wfrqd
+pod/zrs-nginx-b86595984-wfrqd evicted
+node/aks-user03-34408806-vmss000001 drained
+```
+
+Run the following command to retrieve information about the nodes in your Kubernetes cluster, including additional labels related to region and zone topology.
+
+```bash
+kubectl get nodes -L kubernetes.azure.com/agentpool,topology.kubernetes.io/region,topology.kubernetes.io/zone
+```
+
+The command should return a tabular output like the following:
+
+```bash
+NAME                             STATUS                     ROLES   AGE     VERSION   AGENTPOOL   REGION       ZONE
+aks-system-25336594-vmss000000   Ready                      agent   5d22h   v1.28.3   system      westeurope   westeurope-1
+aks-system-25336594-vmss000001   Ready                      agent   5d22h   v1.28.3   system      westeurope   westeurope-2
+aks-system-25336594-vmss000002   Ready                      agent   5d22h   v1.28.3   system      westeurope   westeurope-3
+aks-user01-13513131-vmss000000   Ready                      agent   5d22h   v1.28.3   user01      westeurope   westeurope-1
+aks-user01-13513131-vmss000001   Ready                      agent   5d22h   v1.28.3   user01      westeurope   westeurope-1
+aks-user02-14905318-vmss000000   Ready                      agent   5d22h   v1.28.3   user02      westeurope   westeurope-2
+aks-user02-14905318-vmss000001   Ready                      agent   5d22h   v1.28.3   user02      westeurope   westeurope-2
+aks-user03-34408806-vmss000000   Ready,SchedulingDisabled   agent   5d22h   v1.28.3   user03      westeurope   westeurope-3
+aks-user03-34408806-vmss000001   Ready,SchedulingDisabled   agent   5d22h   v1.28.3   user03      westeurope   westeurope-3
+```
+
+From the output, you can observe that the nodes of the `user03` agent pool are now in a `SchedulingDisabled` status. This indicates that the Kubernetes scheduler is unable to schedule new pods onto these nodes. However, the agent nodes of the `user01` and `user02` node pools in the `westeurope-1` and `westeurope-2` zone are still in a `Ready` status. Now run the following `kubectl` command that returns information about the pod in the `disk-test` namespace.
+
+```bash
+kubectl get pod -o=custom-columns=NAME:.metadata.name,STATUS:.status.phase,IP:.status.podIP,HOSTIP:.status.hostIP,NODE:.spec.nodeName -n disk-test
+```
+
+The command returns an output like the following:
+
+```bash
+NAME                            STATUS    IP             HOSTIP        NODE
+zrs-nginx-b86595984-tgcbm   Running   10.242.0.145   10.241.0.7   aks-user02-14905318-vmss000001
+```
+
+The `zrs-nginx-*` pod was successfully rescheduled on another agent node in another node pool and availability zone. The following diagram shows what happened to the pods after their hosting nodes were cordoned and drained.
+
+![Pods Distribution across Zonal Node Pools before the test](./images/zonal-node-pools-zrs-disk-after.png)
 
 You can run the following script to uncordon the nodes.
 
