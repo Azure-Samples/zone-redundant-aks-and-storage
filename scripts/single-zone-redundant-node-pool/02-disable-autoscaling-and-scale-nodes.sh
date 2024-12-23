@@ -23,8 +23,8 @@ az aks nodepool update \
   --disable-cluster-autoscaler \
   --only-show-errors 1>/dev/null
 
-# Run this command only if the current node count is not equal to two
-if [[ $count -ne 2 ]]; then
+# Run this command only if the current node count is not equal to three
+if [[ $count -ne $nodeCount ]]; then
   # Scale the current node pool to three nodes
   echo "Scaling the [$userNodePoolName] node pool to $nodeCount nodes..."
   az aks nodepool scale \
