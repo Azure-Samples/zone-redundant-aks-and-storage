@@ -881,7 +881,7 @@ aks-user-27342081-vmss000002     Ready    agent   22h   v1.28.3   user        we
 You can note that the agent nodes of the `user` zone-redundant node pool are located in different availability zones. Now run the following `kubectl` command that returns information about the pods in the `disk-test` namespace.
 
 ```bash
-kubectl get pod -o=custom-columns=NAME:.metadata.name,STATUS:.status.phase,IP:.status.podIP,HOSTIP:.status.hostIP,NODE:.spec.nodeName -n disk-test
+kubectl get pod -o=custom-columns=NAME:.metadata.name,STATUS:.status.phase,IP:.status.podIP,HOSTIP:.status.hostIP,NODE:.spec.nodeName -n $namespace
 ```
 
 This command provides information on the pods' names and private IP addresses, as well as the hosting node's name and private IP address. The two pods were scheduled to run on two agent nodes, each in a separate availability zone:
@@ -1009,7 +1009,7 @@ aks-user-27342081-vmss000002     Ready                      agent   22h   v1.28.
 From the output, you can observe that the nodes that were previously running the `lrs-nginx-*` and `zrs-nginx-*` pods are now in a `SchedulingDisabled` status. This indicates that the Kubernetes scheduler is unable to schedule new pods onto these nodes. However, the `aks-user-27342081-vmss000002` is still in a `Ready` status, allowing it to accept new pod assignments. Now run the following `kubectl` command that returns information about the pods in the `disk-test` namespace.
 
 ```bash
-kubectl get pod -o=custom-columns=NAME:.metadata.name,STATUS:.status.phase,IP:.status.podIP,HOSTIP:.status.hostIP,NODE:.spec.nodeName -n disk-test
+kubectl get pod -o=custom-columns=NAME:.metadata.name,STATUS:.status.phase,IP:.status.podIP,HOSTIP:.status.hostIP,NODE:.spec.nodeName -n $namespace
 ```
 
 The `lrs-nginx-*` pod is now in a `Pending` status, while the `zrs-nginx-*` pod runs on the only node in the `user` node pool in a `Ready` status.
@@ -1027,7 +1027,7 @@ The following diagram shows what happened to the pods after their hosting nodes 
 The `lrs-nginx-*` ended up in a `Pending` status because the Kubernetes scheduler couldn't find a node where to run it. In fact, the pod needs to mount the LRS Azure disk, but there are no nodes in a `ready` status in the availability zone hosting the disk. Actually, there is a cluster node in this availability zone, but this node is part of the system-node pool that is tainted with `CriticalAddonsOnly=true:NoSchedule` and the pod doen't have the necessary toleration for this taint. The following command can provide more information on why the pod ended up in a `Pending` status.
 
 ```bash
-kubectl describe pod -l app=lrs-nginx -n disk-test
+kubectl describe pod -l app=lrs-nginx -n $namespace
 ```
 
 This command should return an output like the following. The `Events` section specifies the reasons why the pod could not be scheduled on any node.
@@ -1235,13 +1235,13 @@ To obtain the JSON definition of the LRS and ZRS Azure Disks in the node resourc
 #!/bin/bash
 
 # Get all persistent volumes
-pvs=$(kubectl get pv -o json -n disk-test)
+pvs=$(kubectl get pv -o json -n $namespace)
 
 # Loop over pvs
 for pv in $(echo "${pvs}" | jq -r '.items[].metadata.name'); do
   # Retrieve the resource id of the managed disk from the persistent volume
   echo "Retrieving the resource id of the managed disk from the [$pv] persistent volume..."
-  diskId=$(kubectl get pv $pv -n disk-test -o jsonpath='{.spec.csi.volumeHandle}')
+  diskId=$(kubectl get pv $pv -n $namespace -o jsonpath='{.spec.csi.volumeHandle}')
 
   if [ -n "$diskId" ]; then
     diskName=$(basename $diskId)
@@ -2206,7 +2206,7 @@ aks-user03-34408806-vmss000001   Ready    agent   4d22h   v1.28.3   user03      
 You can note that the agent nodes of the three zonal node pools `user01`, `user02`, and `user03` are located in different availability zones. Now run the following `kubectl` command that returns information about the pods in the `disk-test` namespace.
 
 ```bash
-kubectl get pod -o=custom-columns=NAME:.metadata.name,STATUS:.status.phase,IP:.status.podIP,HOSTIP:.status.hostIP,NODE:.spec.nodeName -n disk-test
+kubectl get pod -o=custom-columns=NAME:.metadata.name,STATUS:.status.phase,IP:.status.podIP,HOSTIP:.status.hostIP,NODE:.spec.nodeName -n $namespace
 ```
 
 This command provides information on the pods' names and private IP addresses, as well as the hosting node's name and private IP address. Each pod is assigned to a different agent node, node pool, and availability zone to ensure optimal resiliency within the region.
@@ -2285,7 +2285,7 @@ aks-user03-34408806-vmss000001   Ready                      agent   4d22h   v1.2
 From the output, you can observe that the nodes of the `user01` agent pool are now in a `SchedulingDisabled` status. This indicates that the Kubernetes scheduler is unable to schedule new pods onto these nodes. However, the agent nodes of the `user02` and `user03` node pools in the `westeurope-2` and `westeurope-2` zone are still in a `Ready` status. Now run the following `kubectl` command that returns information about the pods in the `disk-test` namespace.
 
 ```bash
-kubectl get pod -o=custom-columns=NAME:.metadata.name,STATUS:.status.phase,IP:.status.podIP,HOSTIP:.status.hostIP,NODE:.spec.nodeName -n disk-test
+kubectl get pod -o=custom-columns=NAME:.metadata.name,STATUS:.status.phase,IP:.status.podIP,HOSTIP:.status.hostIP,NODE:.spec.nodeName -n $namespace
 ```
 
 The command returns an output like the following:
@@ -2442,7 +2442,7 @@ aks-user03-34408806-vmss000001   Ready                      agent   17h   v1.28.
 From the output, you can see that the nodes which were previously running the `zne-nginx-01-*`, `zne-nginx-02-*`, and `zne-nginx-03-*` pods are now in a `SchedulingDisabled` status. This means that the Kubernetes scheduler cannot schedule new pods on these nodes. However, the `user01`, `user02`, and `user03` node pools have an additional agent node in a `Ready` status, hence capable of running pods. Now run the following `kubectl` command that returns information about the pods in the `disk-test` namespace.
 
 ```bash
-kubectl get pod -o=custom-columns=NAME:.metadata.name,STATUS:.status.phase,IP:.status.podIP,HOSTIP:.status.hostIP,NODE:.spec.nodeName -n disk-test
+kubectl get pod -o=custom-columns=NAME:.metadata.name,STATUS:.status.phase,IP:.status.podIP,HOSTIP:.status.hostIP,NODE:.spec.nodeName -n $namespace
 ```
 
 The command returns an output like the following:
@@ -2619,7 +2619,7 @@ aks-user03-34408806-vmss000001   Ready    agent   5d22h   v1.28.3   user03      
 You can note that the agent nodes of the three zonal node pools `user01`, `user02`, and `user03` are located in different availability zones. Now run the following `kubectl` command that returns information about the pod in the `disk-test` namespace.
 
 ```bash
-kubectl get pod -o=custom-columns=NAME:.metadata.name,STATUS:.status.phase,IP:.status.podIP,HOSTIP:.status.hostIP,NODE:.spec.nodeName -n disk-test
+kubectl get pod -o=custom-columns=NAME:.metadata.name,STATUS:.status.phase,IP:.status.podIP,HOSTIP:.status.hostIP,NODE:.spec.nodeName -n $namespace
 ```
 
 This command provides information on the pod's name and private IP address, as well as the hosting node's name and private IP address. In this case, the pod is hosted in the first node of the `user03` node pool in the `westeurope-3` availability zone.
@@ -2705,7 +2705,7 @@ aks-user03-34408806-vmss000001   Ready,SchedulingDisabled   agent   5d22h   v1.2
 From the output, you can observe that the nodes of the `user03` agent pool are now in a `SchedulingDisabled` status. This indicates that the Kubernetes scheduler is unable to schedule new pods onto these nodes. However, the agent nodes of the `user01` and `user02` node pools in the `westeurope-1` and `westeurope-2` zone are still in a `Ready` status. Now run the following `kubectl` command that returns information about the pod in the `disk-test` namespace.
 
 ```bash
-kubectl get pod -o=custom-columns=NAME:.metadata.name,STATUS:.status.phase,IP:.status.podIP,HOSTIP:.status.hostIP,NODE:.spec.nodeName -n disk-test
+kubectl get pod -o=custom-columns=NAME:.metadata.name,STATUS:.status.phase,IP:.status.podIP,HOSTIP:.status.hostIP,NODE:.spec.nodeName -n $namespace
 ```
 
 The command returns an output like the following:
