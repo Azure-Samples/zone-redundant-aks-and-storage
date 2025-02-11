@@ -637,7 +637,7 @@ az aks nodepool update \
   --disable-cluster-autoscaler \
   --only-show-errors 1>/dev/null
 
-# Run this command only if the current node count is not equal to two
+# Run this command only if the current node count is not equal to three
 if [[ $count -ne $nodeCount ]]; then
   # Scale the current node pool to three nodes
   echo "Scaling the [$userNodePoolName] node pool to $nodeCount nodes..."
@@ -1851,7 +1851,7 @@ If you plan to deploy workloads to AKS which make use of the [Azure Disks CSI Dr
 3. Create a separate [persistent volume claim](https://kubernetes.io/docs/concepts/storage/persistent-volumes/) for each zonal deployment.
 4. When deploying pods to an AKS cluster that spans multiple availability zones, it is essential to ensure optimal distribution and resilience. To achieve this, you can utilize the [Pod Topology Spread Constraints](https://kubernetes.io/docs/concepts/workloads/pods/pod-topology-spread-constraints/) Kubernetes feature. By implementing Pod Topology Spread Constraints, you gain granular control over how pods are spread across your AKS cluster, taking into account failure-domains like regions, availability zones, and nodes. In this scenario, you can create constraints that span pod replicas across different nodes within the intended availability zone.
 
-### Test Workload resiliency of an AKS cluster with Zone-Redundant Node Pools
+### Test Workload resiliency of an AKS cluster with Zonal Node Pools
 
 In this test, we simulate a scenario where the agent nodes in a specific availability zone suddenly become unavailable due to a failure. The objective is to verify that the application continues to run successfully on the agent nodes in the other availability zones. To prevent interference from the cluster autoscaler during the test and ensure that each zonal node pool consists of exactly two agent nodes, you can execute the following bash script. This script disables the cluster autoscaler on each node pool and manually sets the number of nodes to two for each of them.
 
@@ -1888,7 +1888,7 @@ for ((i = 1; i <= 3; i++)); do
 
   # Run this command only if the current node count is not equal to two
   if [[ $count -ne $nodeCount ]]; then
-    # Scale the current node pool to three nodes
+    # Scale the current node pool to two nodes
     echo "Scaling the [$userNodePoolName] node pool to $nodeCount nodes..."
     az aks nodepool scale \
       --cluster-name $aksClusterName \
